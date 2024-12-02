@@ -1,86 +1,74 @@
 from flask import Flask, request, jsonify
-from model.athlete_historic import AthleteHistoric, AthleteHistoricAVG
 
 app = Flask(__name__)
 
-import pickle
-with open('modelo.pkl', 'rb') as f:
-    modelo = pickle.load(f)
+# Função para calcular os pontos de cada atleta e a soma total
+def calculate_statistics(challenger_historics, challenged_historics):
+    total_points_Challenger = 0  # Soma total de pontos
+    total_players_Challenger = 0  # Contador de atletas
 
-@app.post('/generate-forecast')
-def home():
-    data = request.get_json()
+    total_points_Challenged = 0  # Soma total de pontos
+    total_players_Challenged = 0  # Contador de atletas
 
-    challenger_historics = generate_historic_list(data.get('challengerHistorics', []))
-    challenged_historics = generate_historic_list(data.get('challengedHistorics', []))
+    # Calculando para o time Challenger
+    for athlete_historic in challenger_historics:
+        points = (athlete_historic["twoPointsConverted"] * 2) + (athlete_historic["threePointsConverted"] * 3)
+        total_points_Challenger += points
 
-    challenger_avg = generate_historic_avg(challenger_historics)
-    challenged_avg = generate_historic_avg(challenged_historics)
+    # Calculando para o time Challenged
+    for athlete_historic in challenged_historics:
+        points = (athlete_historic["twoPointsConverted"] * 2) + (athlete_historic["threePointsConverted"] * 3)
+        total_points_Challenged += points
 
-    entrada = [[
-        challenger_avg.twoPointsConverted, 
-        challenged_avg.twoPointsConverted
-    ]]
-    
-    probabilidade = modelo.predict_proba(entrada)[0] 
-    probabilidade_desafiante = round(probabilidade[1] * 100, 2)
-    probabilidade_desafiado = round(probabilidade[0] * 100, 2)
 
-    return jsonify({
-        "challenger_avg": challenger_avg.info(),
-        "challenged_avg": challenged_avg.info(),
-        "forecast": {
-            "challengerWinProbability": f"{probabilidade_desafiante}%",
-            "challengedWinProbability": f"{probabilidade_desafiado}%"
-        }
-    })
+    print("pontos challenger" ,  total_points_Challenger)
+    print("pontos challenged" , total_points_Challenged)
 
-def generate_historic_list(historics):
-    historic_list = []
-    for historic in historics:
-        historic = AthleteHistoric(**historic)
-        historic_list.append(historic)
 
-    return historic_list
+    tot_points_teams = total_points_Challenger + total_points_Challenged;
 
-def generate_historic_avg(historics):
-    if not historics:
-        return AthleteHistoricAVG(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
-    
-    offReboundsAVG = defReboundsAVG = blocksAVG = foulsAVG = turnoversAVG = assistsAVG = 0
-    freeThrowConvertedAVG = freeThrowAttempedAVG = stealsAVG = threePointsConvertedAVG = 0
-    threePointsAttempedAVG = twoPointsConvertedAVG = twoPointsAttempedAVG = 0
+    formatted_tot_points_teams = round(tot_points_teams, 2);
 
-    for historic in historics:
-        offReboundsAVG += historic.offRebounds
-        defReboundsAVG += historic.defRebounds
-        blocksAVG += historic.blocks
-        foulsAVG += historic.fouls
-        turnoversAVG += historic.turnovers
-        assistsAVG += historic.assists
-        freeThrowConvertedAVG += historic.freeThrowConverted
-        freeThrowAttempedAVG += historic.freeThrowAttemped
-        stealsAVG += historic.steals
-        threePointsConvertedAVG += historic.threePointsConverted
-        threePointsAttempedAVG += historic.threePointsAttemped
-        twoPointsConvertedAVG += historic.twoPointsConverted
-        twoPointsAttempedAVG += historic.twoPointsAttemped
+    print(formatted_tot_points_teams);
 
-    total = len(historics)
-    return AthleteHistoricAVG(
-        round(offReboundsAVG / total, 2),
-        round(defReboundsAVG / total, 2),
-        round(blocksAVG / total, 2),
-        round(foulsAVG / total, 2),
-        round(turnoversAVG / total, 2),
-        round(assistsAVG / total, 2),
-        round(freeThrowConvertedAVG / total, 2),
-        round(freeThrowAttempedAVG / total, 2),
-        round(stealsAVG / total, 2),
-        round(threePointsConvertedAVG / total, 2),
-        round(threePointsAttempedAVG / total, 2),
-        round(twoPointsConvertedAVG / total, 2),
-        round(twoPointsAttempedAVG / total, 2)
-    )
+    # Calculando a média de pontos
+    average_points_Challenger = total_points_Challenger 
+    average_points_Challenged = total_points_Challenged 
 
-app.run(debug=True, port=5729)
+    # Inicializando opponent_points (a média do time adversário)
+    # opponent_points_Challenged = 100  # Média do time Challenger
+    # opponent_points_Challenger = 100 # Média do time Challenged
+
+    # Calculando a porcentagem de vitória
+    win_percentage_Challenger = (average_points_Challenger / (average_points_Challenger + average_points_Challenged)) * 100
+    win_percentage_Challenged = (average_points_Challenged / (average_points_Challenger + average_points_Challenged)) * 100
+
+    formatted_win_percentage_Challenger = round(win_percentage_Challenger, 2)
+    formatted_win_percentage_Challenged = round(win_percentage_Challenged, 2)
+
+    # Retornando os resultados
+    return {
+        "ChallengerWinPercentage": formatted_win_percentage_Challenger,
+        "ChallengedWinPercentage": formatted_win_percentage_Challenged
+    }
+
+@app.route('/generate-forecast', methods=['POST'])
+def generate_forecast():
+    try:
+        # Recebe os dados JSON da requisição
+        data = request.get_json()
+        challenger_historics = data["challengerHistorics"]  # Acessando o histórico do time Challenger
+        challenged_historics = data["challengedHistorics"]  # Acessando o histórico do time Challenged
+
+        # Realiza os cálculos para ambos os times
+        results = calculate_statistics(challenger_historics, challenged_historics)
+
+        print("Resultados calculados:", results)
+
+        # Retorna os resultados como JSON
+        return jsonify(results), 200
+    except Exception as e:
+        return str(e), 500
+
+if __name__ == '__main__':
+    app.run(debug=True, port=5729)
